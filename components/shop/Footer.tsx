@@ -21,9 +21,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
           {/* Brand column */}
           <div>
-            <h3 className="font-playfair text-2xl font-bold text-saffron mb-3">
-              KurumKurum
-            </h3>
+            <img src="/logo.svg" alt="KurumKurum" className="h-14 w-auto mb-3 brightness-0 invert opacity-90" />
             <p className="text-cream/60 text-sm leading-relaxed mb-4">
               Bringing the authentic flavors of the Himalayas to your doorstep.
               We curate the finest Nepali and Himalayan snacks, sourced from

@@ -40,13 +40,8 @@ export default function Navbar() {
           {/* Main row: Logo | Search | Actions */}
           <div className="flex items-center gap-4 h-14">
             {/* Logo */}
-            <Link href="/" className="flex flex-col leading-none group flex-shrink-0">
-              <span className="font-playfair text-xl font-bold text-saffron group-hover:text-[#b34f14] transition-colors">
-                KurumKurum
-              </span>
-              <span className="text-[8px] font-semibold tracking-widest uppercase text-charcoal/40 -mt-0.5">
-                Premium Himalayan Bites
-              </span>
+            <Link href="/" className="flex-shrink-0 hover:opacity-85 transition-opacity">
+              <img src="/logo.svg" alt="KurumKurum" className="h-10 w-auto" />
             </Link>
 
             {/* Search — center, hidden on mobile */}
