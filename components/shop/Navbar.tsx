@@ -2,18 +2,47 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { motion, useScroll, useTransform } from "framer-motion";
+import type { User } from "@supabase/supabase-js";
 import { useCartStore } from "@/store/cartStore";
+import { createClient } from "@/lib/supabase/client";
 import AnnouncementBar from "@/components/shop/AnnouncementBar";
 import SearchBar from "@/components/shop/SearchBar";
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const pathname = usePathname();
   const { scrollY } = useScroll();
   const shadowOpacity = useTransform(scrollY, [0, 50], [0, 1]);
 
   const { totalItems, openCart } = useCartStore();
   const itemCount = totalItems();
+
+  // Track auth state: load the current user, then keep it in sync.
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signInHref = `/login?redirect=${encodeURIComponent(pathname || "/")}`;
+  const firstName =
+    (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
+    user?.email?.split("@")[0] ||
+    "Account";
+
+  const handleSignOut = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    setMobileOpen(false);
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -68,12 +97,26 @@ export default function Navbar() {
                 )}
               </button>
 
-              <Link
-                href="/login"
-                className="hidden sm:flex items-center text-sm font-semibold text-charcoal/80 hover:text-saffron transition-colors border border-charcoal/20 hover:border-saffron px-3.5 py-1.5 rounded-lg"
-              >
-                Sign In
-              </Link>
+              {user ? (
+                <div className="hidden sm:flex items-center gap-2">
+                  <span className="text-sm font-semibold text-charcoal/80 max-w-[120px] truncate">
+                    Hi, {firstName}
+                  </span>
+                  <button
+                    onClick={handleSignOut}
+                    className="text-sm font-semibold text-charcoal/80 hover:text-saffron transition-colors border border-charcoal/20 hover:border-saffron px-3.5 py-1.5 rounded-lg"
+                  >
+                    Sign Out
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href={signInHref}
+                  className="hidden sm:flex items-center text-sm font-semibold text-charcoal/80 hover:text-saffron transition-colors border border-charcoal/20 hover:border-saffron px-3.5 py-1.5 rounded-lg"
+                >
+                  Sign In
+                </Link>
+              )}
 
               <button
                 onClick={() => setMobileOpen(!mobileOpen)}
@@ -123,7 +166,6 @@ export default function Navbar() {
               { href: "/shop?category=instant-noodles", label: "Instant Noodles" },
               { href: "/shop?category=sweets-mithai", label: "Sweets & Mithai" },
               { href: "/shop?category=spices-condiments", label: "Spices" },
-              { href: "/login", label: "Sign In" },
             ].map(({ href, label }) => (
               <Link
                 key={href}
@@ -134,6 +176,22 @@ export default function Navbar() {
                 {label}
               </Link>
             ))}
+            {user ? (
+              <button
+                onClick={handleSignOut}
+                className="block w-full text-left px-3 py-2 text-sm font-medium text-charcoal/80 hover:text-saffron hover:bg-saffron/5 rounded-lg transition-colors"
+              >
+                Sign Out ({firstName})
+              </button>
+            ) : (
+              <Link
+                href={signInHref}
+                onClick={() => setMobileOpen(false)}
+                className="block px-3 py-2 text-sm font-medium text-charcoal/80 hover:text-saffron hover:bg-saffron/5 rounded-lg transition-colors"
+              >
+                Sign In
+              </Link>
+            )}
           </motion.div>
         )}
       </motion.header>
