@@ -1,85 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { Product } from "@/types";
-
-const INITIAL_PRODUCTS: Product[] = [
-  {
-    id: "1",
-    name: "Wai Wai Instant Noodles",
-    brand: "Wai Wai",
-    category_id: "instant-noodles",
-    weight_grams: 75,
-    weight_label: "75g per pack",
-    unit_type: "pack",
-    price: 1.99,
-    description: "Classic Nepali instant noodles with signature spice mix.",
-    image_url: "https://placehold.co/400x400/E8890C/FDF6EC?text=Wai+Wai",
-    in_stock: true,
-    created_at: "2024-01-01",
-    slug: "wai-wai-instant-noodles",
-  },
-  {
-    id: "2",
-    name: "Haldiram's Bhujia",
-    brand: "Haldiram's",
-    category_id: "chips-crisps",
-    weight_grams: 400,
-    weight_label: "400g",
-    unit_type: "bag",
-    price: 7.99,
-    description:
-      "Crispy and flavorful moth bean noodles with authentic spices.",
-    image_url: "https://placehold.co/400x400/9B1B30/FDF6EC?text=Bhujia",
-    in_stock: true,
-    created_at: "2024-01-01",
-    slug: "haldirams-bhujia",
-  },
-  {
-    id: "3",
-    name: "Aloo Jeera Chips",
-    brand: "Himalayan Bites",
-    category_id: "chips-crisps",
-    weight_grams: 200,
-    weight_label: "200g",
-    unit_type: "bag",
-    price: 4.99,
-    description: "Crispy potato chips seasoned with cumin and Himalayan salt.",
-    image_url: "https://placehold.co/400x400/E8890C/1A1A2E?text=Chips",
-    in_stock: true,
-    created_at: "2024-01-01",
-    slug: "aloo-jeera-chips",
-  },
-  {
-    id: "4",
-    name: "Himalayan Pink Salt",
-    brand: "Himalayan Gold",
-    category_id: "spices-condiments",
-    weight_grams: 1000,
-    weight_label: "1kg",
-    unit_type: "bag",
-    price: 9.99,
-    description: "Pure Himalayan pink salt, mineral-rich and full-flavored.",
-    image_url: "https://placehold.co/400x400/E8890C/FDF6EC?text=Pink+Salt",
-    in_stock: true,
-    created_at: "2024-01-01",
-    slug: "himalayan-pink-salt",
-  },
-];
-
-const CATEGORIES = [
-  { id: "chips-crisps", name: "Chips & Crisps" },
-  { id: "instant-noodles", name: "Instant Noodles" },
-  { id: "sweets-mithai", name: "Sweets & Mithai" },
-  { id: "spices-condiments", name: "Spices & Condiments" },
-];
+import toast from "react-hot-toast";
+import { createClient } from "@/lib/supabase/client";
+import { Product, Category } from "@/types";
 
 const EMPTY_FORM: Omit<Product, "id" | "created_at"> = {
   name: "",
   brand: "",
-  category_id: "chips-crisps",
+  category_id: "",
   weight_grams: 0,
   weight_label: "",
   unit_type: "bag",
@@ -87,19 +18,40 @@ const EMPTY_FORM: Omit<Product, "id" | "created_at"> = {
   description: "",
   image_url: "",
   in_stock: true,
+  stock_quantity: 0,
   slug: "",
 };
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient();
+      const [{ data: prods }, { data: cats }] = await Promise.all([
+        supabase
+          .from("products")
+          .select("*, category:categories(id, name, slug)")
+          .order("created_at", { ascending: false }),
+        supabase.from("categories").select("*").order("name"),
+      ]);
+      setProducts(prods ?? []);
+      setCategories(cats ?? []);
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   const openAdd = () => {
     setEditingProduct(null);
-    setForm(EMPTY_FORM);
+    setForm({ ...EMPTY_FORM, category_id: categories[0]?.id ?? "" });
     setShowModal(true);
   };
 
@@ -116,39 +68,73 @@ export default function AdminProductsPage() {
       description: product.description,
       image_url: product.image_url,
       in_stock: product.in_stock,
+      stock_quantity: product.stock_quantity ?? 0,
       slug: product.slug ?? "",
     });
     setShowModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingProduct) {
+    setSaving(true);
+    try {
+      const url = editingProduct
+        ? `/api/admin/products/${editingProduct.id}`
+        : "/api/admin/products";
+      const res = await fetch(url, {
+        method: editingProduct ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Save failed");
+
+      const saved = json.product as Product;
+      setProducts((prev) =>
+        editingProduct
+          ? prev.map((p) => (p.id === saved.id ? saved : p))
+          : [saved, ...prev]
+      );
+      toast.success(editingProduct ? "Product updated" : "Product added");
+      setShowModal(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    const prev = products;
+    setProducts((p) => p.filter((x) => x.id !== id));
+    setDeleteConfirm(null);
+    const res = await fetch(`/api/admin/products/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      setProducts(prev);
+      toast.error("Delete failed");
+    } else {
+      toast.success("Product deleted");
+    }
+  };
+
+  const toggleStock = async (product: Product) => {
+    const next = !product.in_stock;
+    setProducts((prev) =>
+      prev.map((p) => (p.id === product.id ? { ...p, in_stock: next } : p))
+    );
+    const res = await fetch(`/api/admin/products/${product.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ in_stock: next }),
+    });
+    if (!res.ok) {
       setProducts((prev) =>
         prev.map((p) =>
-          p.id === editingProduct.id ? { ...editingProduct, ...form } : p
+          p.id === product.id ? { ...p, in_stock: product.in_stock } : p
         )
       );
-    } else {
-      const newProduct: Product = {
-        ...form,
-        id: Date.now().toString(),
-        created_at: new Date().toISOString(),
-      };
-      setProducts((prev) => [newProduct, ...prev]);
+      toast.error("Could not update stock");
     }
-    setShowModal(false);
-  };
-
-  const handleDelete = (id: string) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
-    setDeleteConfirm(null);
-  };
-
-  const toggleStock = (id: string) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, in_stock: !p.in_stock } : p))
-    );
   };
 
   return (
@@ -172,113 +158,126 @@ export default function AdminProductsPage() {
         </button>
       </div>
 
+      {/* Loading state */}
+      {loading && (
+        <div className="text-center py-16 text-charcoal/40">Loading products…</div>
+      )}
+
       {/* Table */}
-      <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-50 border-b border-charcoal/5">
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Product
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Brand
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Category
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Price
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Weight
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  In Stock
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-charcoal/5">
-              {products.map((product) => (
-                <tr
-                  key={product.id}
-                  className="hover:bg-gray-50/50 transition-colors"
-                >
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-cream flex-shrink-0">
-                        <Image
-                          src={
-                            product.image_url ||
-                            "https://placehold.co/40x40/E8890C/FDF6EC?text=KK"
-                          }
-                          alt={product.name}
-                          fill
-                          sizes="40px"
-                          className="object-cover"
-                          unoptimized
-                        />
-                      </div>
-                      <span className="text-sm font-medium text-charcoal line-clamp-2 max-w-[180px]">
-                        {product.name}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-charcoal/70">
-                    {product.brand}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="text-xs bg-saffron/10 text-saffron font-semibold px-2 py-1 rounded-full">
-                      {CATEGORIES.find((c) => c.id === product.category_id)
-                        ?.name ?? product.category_id}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-charcoal">
-                    ${product.price.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-charcoal/60">
-                    {product.weight_label}
-                  </td>
-                  <td className="px-6 py-4">
-                    {/* Toggle */}
-                    <button
-                      onClick={() => toggleStock(product.id)}
-                      className={`relative w-10 h-5 rounded-full transition-colors ${
-                        product.in_stock ? "bg-green-400" : "bg-gray-300"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                          product.in_stock ? "translate-x-5" : "translate-x-0.5"
-                        }`}
-                      />
-                    </button>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => openEdit(product)}
-                        className="text-xs font-semibold text-saffron hover:text-[#d07a0b] transition-colors px-2 py-1 rounded-lg hover:bg-saffron/5"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(product.id)}
-                        className="text-xs font-semibold text-crimson hover:text-[#7e1527] transition-colors px-2 py-1 rounded-lg hover:bg-crimson/5"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </td>
+      {!loading && (
+        <div className="bg-white rounded-2xl shadow-sm border border-charcoal/5 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 border-b border-charcoal/5">
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Product
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Brand
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Category
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Price
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Weight
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    In Stock
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
+                    Actions
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-charcoal/5">
+                {products.map((product) => (
+                  <tr
+                    key={product.id}
+                    className="hover:bg-gray-50/50 transition-colors"
+                  >
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-cream flex-shrink-0">
+                          <Image
+                            src={
+                              product.image_url ||
+                              "https://placehold.co/40x40/E8890C/FDF6EC?text=KK"
+                            }
+                            alt={product.name}
+                            fill
+                            sizes="40px"
+                            className="object-cover"
+                            unoptimized
+                          />
+                        </div>
+                        <span className="text-sm font-medium text-charcoal line-clamp-2 max-w-[180px]">
+                          {product.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-charcoal/70">
+                      {product.brand}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-xs bg-saffron/10 text-saffron font-semibold px-2 py-1 rounded-full">
+                        {categories.find((c) => c.id === product.category_id)
+                          ?.name ?? product.category_id}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-charcoal">
+                      ${product.price.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-charcoal/60">
+                      {product.weight_label}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-charcoal/60">
+                      {product.stock_quantity ?? 0}
+                    </td>
+                    <td className="px-6 py-4">
+                      {/* Toggle */}
+                      <button
+                        onClick={() => toggleStock(product)}
+                        className={`relative w-10 h-5 rounded-full transition-colors ${
+                          product.in_stock ? "bg-green-400" : "bg-gray-300"
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                            product.in_stock ? "translate-x-5" : "translate-x-0.5"
+                          }`}
+                        />
+                      </button>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEdit(product)}
+                          className="text-xs font-semibold text-saffron hover:text-[#d07a0b] transition-colors px-2 py-1 rounded-lg hover:bg-saffron/5"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteConfirm(product.id)}
+                          className="text-xs font-semibold text-crimson hover:text-[#7e1527] transition-colors px-2 py-1 rounded-lg hover:bg-crimson/5"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Add/Edit Modal */}
       <AnimatePresence>
@@ -351,7 +350,7 @@ export default function AdminProductsPage() {
                         }
                         className="w-full px-4 py-2.5 border border-charcoal/15 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-saffron bg-white"
                       >
-                        {CATEGORIES.map((cat) => (
+                        {categories.map((cat) => (
                           <option key={cat.id} value={cat.id}>
                             {cat.name}
                           </option>
@@ -425,6 +424,23 @@ export default function AdminProductsPage() {
                       />
                     </FormField>
 
+                    <FormField label="Stock Quantity" required>
+                      <input
+                        type="number"
+                        value={form.stock_quantity}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            stock_quantity: Number(e.target.value),
+                          }))
+                        }
+                        required
+                        min={0}
+                        className="w-full px-4 py-2.5 border border-charcoal/15 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-saffron"
+                        placeholder="e.g. 50"
+                      />
+                    </FormField>
+
                     <FormField label="Slug">
                       <input
                         type="text"
@@ -495,9 +511,14 @@ export default function AdminProductsPage() {
                     </button>
                     <button
                       type="submit"
-                      className="flex-1 px-5 py-3 bg-saffron text-white font-semibold rounded-xl hover:bg-[#d07a0b] transition-colors text-sm"
+                      disabled={saving}
+                      className="flex-1 px-5 py-3 bg-saffron text-white font-semibold rounded-xl hover:bg-[#d07a0b] transition-colors text-sm disabled:opacity-60"
                     >
-                      {editingProduct ? "Save Changes" : "Add Product"}
+                      {saving
+                        ? "Saving…"
+                        : editingProduct
+                        ? "Save Changes"
+                        : "Add Product"}
                     </button>
                   </div>
                 </form>

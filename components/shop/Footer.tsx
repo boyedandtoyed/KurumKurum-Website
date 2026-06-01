@@ -44,7 +44,7 @@ export default function Footer() {
                 { href: "/shop?category=instant-noodles", label: "Instant Noodles" },
                 { href: "/shop?category=sweets-mithai", label: "Sweets & Mithai" },
                 { href: "/shop?category=spices-condiments", label: "Spices & Condiments" },
-                { href: "/login", label: "My Account" },
+                { href: "/account", label: "My Account" },
               ].map(({ href, label }) => (
                 <li key={href}>
                   <Link

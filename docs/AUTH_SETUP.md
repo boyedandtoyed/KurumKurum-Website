@@ -73,3 +73,19 @@ In **Supabase → Authentication → URL Configuration**:
 - Admin route protection using `is_admin` (admin pages still show demo data).
 - Password reset / forgot-password flow.
 - Attaching the logged-in user to checkout/orders.
+
+## Admin Management Setup (one-time)
+
+After deploying the admin-management feature, do these once:
+
+1. **Run the schema:** In **Supabase Dashboard → SQL Editor**, paste and run
+   [`supabase/admin-and-orders.sql`](../supabase/admin-and-orders.sql). This adds
+   `stock_quantity` to products, creates the `orders` / `order_items` tables, sets
+   RLS, and closes the `is_admin` self-promotion hole.
+
+2. **Bootstrap the first admin:** In **Supabase Dashboard → Table Editor →
+   `profiles`**, find your own row and set `is_admin = true`. (Someone must be the
+   first admin before the in-app "Admin Users" page can promote anyone else.)
+
+After this, all product, order, and admin-user management happens from `/admin`.
+No further SQL is needed for day-to-day work.
