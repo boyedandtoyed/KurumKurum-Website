@@ -99,9 +99,12 @@ export default function Navbar() {
 
               {user ? (
                 <div className="hidden sm:flex items-center gap-2">
-                  <span className="text-sm font-semibold text-charcoal/80 max-w-[120px] truncate">
+                  <Link
+                    href="/account"
+                    className="text-sm font-semibold text-charcoal/80 hover:text-saffron transition-colors max-w-[120px] truncate"
+                  >
                     Hi, {firstName}
-                  </span>
+                  </Link>
                   <button
                     onClick={handleSignOut}
                     className="text-sm font-semibold text-charcoal/80 hover:text-saffron transition-colors border border-charcoal/20 hover:border-saffron px-3.5 py-1.5 rounded-lg"
@@ -177,12 +180,21 @@ export default function Navbar() {
               </Link>
             ))}
             {user ? (
-              <button
-                onClick={handleSignOut}
-                className="block w-full text-left px-3 py-2 text-sm font-medium text-charcoal/80 hover:text-saffron hover:bg-saffron/5 rounded-lg transition-colors"
-              >
-                Sign Out ({firstName})
-              </button>
+              <>
+                <Link
+                  href="/account"
+                  onClick={() => setMobileOpen(false)}
+                  className="block px-3 py-2 text-sm font-medium text-charcoal/80 hover:text-saffron hover:bg-saffron/5 rounded-lg transition-colors"
+                >
+                  My Account
+                </Link>
+                <button
+                  onClick={handleSignOut}
+                  className="block w-full text-left px-3 py-2 text-sm font-medium text-charcoal/80 hover:text-saffron hover:bg-saffron/5 rounded-lg transition-colors"
+                >
+                  Sign Out ({firstName})
+                </button>
+              </>
             ) : (
               <Link
                 href={signInHref}
