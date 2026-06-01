@@ -25,6 +25,18 @@ export async function POST(req: Request) {
     );
   }
 
+  // Public endpoint — never trust client quantities. Reject non-positive or
+  // non-integer values (which could skew totals or increase stock on decrement).
+  const hasInvalidQuantity = items.some(
+    (i) => !Number.isInteger(i.quantity) || i.quantity <= 0
+  );
+  if (hasInvalidQuantity) {
+    return NextResponse.json(
+      { error: "Each item must have a positive whole-number quantity" },
+      { status: 400 }
+    );
+  }
+
   const service = createServiceClient();
 
   // Load authoritative product data (price, weight, stock) from the DB.
