@@ -17,6 +17,7 @@ export interface Product {
   description: string;
   image_url: string;
   in_stock: boolean;
+  stock_quantity: number;
   is_featured?: boolean;
   created_at: string;
   slug?: string;
