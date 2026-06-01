@@ -17,6 +17,7 @@ export interface Product {
   description: string;
   image_url: string;
   in_stock: boolean;
+  stock_quantity: number;
   is_featured?: boolean;
   created_at: string;
   slug?: string;
@@ -59,10 +60,18 @@ export interface OrderItem {
   product_snapshot: Partial<Product>;
 }
 
+export interface ProfileAddress {
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+
 export interface Profile {
   id: string;
   full_name: string;
   phone: string;
+  address: ProfileAddress | null;
   is_admin: boolean;
   created_at: string;
 }

@@ -3,7 +3,9 @@
 import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import toast from "react-hot-toast";
 import Navbar from "@/components/shop/Navbar";
 import { useCartStore } from "@/store/cartStore";
 import { calculateShipping } from "@/lib/shipping";
@@ -11,8 +13,10 @@ import { calculateShipping } from "@/lib/shipping";
 type Step = 1 | 2 | 3;
 
 export default function CheckoutPage() {
-  const { items, totalPrice, totalWeightGrams } = useCartStore();
+  const router = useRouter();
+  const { items, totalPrice, totalWeightGrams, clearCart } = useCartStore();
   const [step, setStep] = useState<Step>(1);
+  const [placing, setPlacing] = useState(false);
 
   const subtotal = totalPrice();
   const weightGrams = totalWeightGrams();
@@ -23,6 +27,31 @@ export default function CheckoutPage() {
 
   const [contact, setContact] = useState({ name: "", email: "", phone: "" });
   const [address, setAddress] = useState({ street: "", city: "", state: "", zip: "" });
+
+  const placeOrder = async () => {
+    setPlacing(true);
+    try {
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contact,
+          shipping_address: { full_name: contact.name, ...address },
+          items: items.map((i) => ({
+            product_id: i.product.id,
+            quantity: i.quantity,
+          })),
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Could not place order");
+      clearCart();
+      router.push(`/checkout/confirmation?order=${json.orderId}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not place order");
+      setPlacing(false);
+    }
+  };
 
   if (items.length === 0) {
     return (
@@ -203,11 +232,15 @@ export default function CheckoutPage() {
                   <button onClick={() => setStep(2)} className="px-5 py-3.5 border border-charcoal/20 text-charcoal/70 font-semibold rounded-xl hover:border-charcoal/40 transition-colors text-sm">
                     ← Back
                   </button>
-                  <button className="flex-1 py-3.5 bg-saffron text-white font-bold rounded-xl hover:bg-[#b34f14] transition-colors text-sm">
-                    Pay ${orderTotal.toFixed(2)}
+                  <button
+                    onClick={placeOrder}
+                    disabled={placing}
+                    className="flex-1 py-3.5 bg-saffron text-white font-bold rounded-xl hover:bg-[#b34f14] transition-colors text-sm disabled:opacity-60"
+                  >
+                    {placing ? "Placing order…" : `Place Order — $${orderTotal.toFixed(2)}`}
                   </button>
                 </div>
-                <p className="text-[11px] text-charcoal/40 text-center">🔒 Secured by Stripe. Your payment info is never stored.</p>
+                <p className="text-[11px] text-charcoal/40 text-center">Payment is collected on delivery. No card is charged now.</p>
               </motion.div>
             )}
           </div>

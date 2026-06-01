@@ -35,9 +35,9 @@ export default function ProductCard({ product }: { product: Product }) {
   const [added, setAdded] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
 
-  const slug =
-    product.slug ||
-    product.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  // Link by real slug when present, otherwise fall back to the id so every
+  // product is reachable on its detail page.
+  const slug = product.slug || product.id;
 
   const handleAddToCart = () => {
     if (!product.in_stock) return;

@@ -1,56 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-
-const DEMO_STATS = [
-  { label: "Total Orders", value: "142", icon: "📦", color: "saffron" },
-  { label: "Revenue", value: "$4,823", icon: "💰", color: "green" },
-  { label: "Products", value: "38", icon: "🛍️", color: "crimson" },
-  { label: "Pending Orders", value: "7", icon: "⏳", color: "amber" },
-];
-
-const DEMO_ORDERS = [
-  {
-    id: "ORD-001",
-    customer: "Priya Sharma",
-    items: 3,
-    total: 24.97,
-    status: "delivered" as const,
-    date: "2024-12-20",
-  },
-  {
-    id: "ORD-002",
-    customer: "Rajesh Kumar",
-    items: 5,
-    total: 41.45,
-    status: "shipped" as const,
-    date: "2024-12-19",
-  },
-  {
-    id: "ORD-003",
-    customer: "Anita Patel",
-    items: 2,
-    total: 13.98,
-    status: "processing" as const,
-    date: "2024-12-19",
-  },
-  {
-    id: "ORD-004",
-    customer: "Ravi Thapa",
-    items: 8,
-    total: 62.32,
-    status: "pending" as const,
-    date: "2024-12-18",
-  },
-  {
-    id: "ORD-005",
-    customer: "Sita Gurung",
-    items: 1,
-    total: 7.99,
-    status: "pending" as const,
-    date: "2024-12-18",
-  },
-];
+import { createClient } from "@/lib/supabase/client";
+import { Order } from "@/types";
 
 const STATUS_STYLES: Record<string, string> = {
   pending: "bg-amber-100 text-amber-700",
@@ -60,9 +13,40 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [productCount, setProductCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      const supabase = createClient();
+      const [ordersJson, { count }] = await Promise.all([
+        fetch("/api/admin/orders").then((r) => r.json()),
+        supabase
+          .from("products")
+          .select("id", { count: "exact", head: true }),
+      ]);
+      setOrders((ordersJson.orders as Order[]) ?? []);
+      setProductCount(count ?? 0);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const revenue = orders.reduce((sum, o) => sum + Number(o.total_amount), 0);
+  const pending = orders.filter((o) => o.status === "pending").length;
+
+  const stats = [
+    { label: "Total Orders", value: String(orders.length), icon: "📦" },
+    { label: "Revenue", value: `$${revenue.toFixed(2)}`, icon: "💰" },
+    { label: "Products", value: String(productCount), icon: "🛍️" },
+    { label: "Pending Orders", value: String(pending), icon: "⏳" },
+  ];
+
+  const recent = orders.slice(0, 5);
+
   return (
     <div className="p-8">
-      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -77,9 +61,8 @@ export default function AdminDashboard() {
         </p>
       </motion.div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5 mb-10">
-        {DEMO_STATS.map((stat, i) => (
+        {stats.map((stat, i) => (
           <motion.div
             key={stat.label}
             initial={{ opacity: 0, y: 20 }}
@@ -89,19 +72,15 @@ export default function AdminDashboard() {
           >
             <div className="flex items-start justify-between mb-3">
               <span className="text-3xl">{stat.icon}</span>
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-saffron/10 text-saffron">
-                Active
-              </span>
             </div>
             <p className="text-3xl font-bold text-charcoal mb-1">
-              {stat.value}
+              {loading ? "…" : stat.value}
             </p>
             <p className="text-sm text-charcoal/50">{stat.label}</p>
           </motion.div>
         ))}
       </div>
 
-      {/* Recent Orders */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -113,63 +92,54 @@ export default function AdminDashboard() {
             Recent Orders
           </h2>
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Order ID
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Customer
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Items
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Total
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40">
-                  Date
-                </th>
+                {["Order", "Customer", "Total", "Status", "Date"].map((h) => (
+                  <th
+                    key={h}
+                    className="px-6 py-3 text-left text-xs font-semibold uppercase tracking-wider text-charcoal/40"
+                  >
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-charcoal/5">
-              {DEMO_ORDERS.map((order) => (
-                <tr
-                  key={order.id}
-                  className="hover:bg-gray-50/50 transition-colors"
-                >
-                  <td className="px-6 py-4 text-sm font-semibold text-saffron">
-                    {order.id}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-charcoal font-medium">
-                    {order.customer}
-                  </td>
-                  <td className="px-6 py-4 text-sm text-charcoal/60">
-                    {order.items} item{order.items !== 1 ? "s" : ""}
-                  </td>
-                  <td className="px-6 py-4 text-sm font-bold text-charcoal">
-                    ${order.total.toFixed(2)}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
-                        STATUS_STYLES[order.status]
-                      }`}
-                    >
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 text-sm text-charcoal/50">
-                    {order.date}
+              {recent.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-charcoal/40">
+                    {loading ? "Loading…" : "No orders yet."}
                   </td>
                 </tr>
-              ))}
+              ) : (
+                recent.map((order) => (
+                  <tr key={order.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-semibold text-saffron">
+                      #{order.id.slice(0, 8)}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-charcoal font-medium">
+                      {order.guest_name ?? "—"}
+                    </td>
+                    <td className="px-6 py-4 text-sm font-bold text-charcoal">
+                      ${order.total_amount.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                          STATUS_STYLES[order.status]
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-sm text-charcoal/50">
+                      {new Date(order.created_at).toLocaleDateString()}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
