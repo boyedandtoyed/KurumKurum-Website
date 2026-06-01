@@ -4,6 +4,34 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 const STATUSES = ["pending", "processing", "shipped", "delivered"];
 
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+) {
+  const admin = await getAdminContext();
+  if (!admin) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const supabase = createServiceClient();
+  const { data: order, error } = await supabase
+    .from("orders")
+    .select("*")
+    .eq("id", params.id)
+    .single();
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const { data: items } = await supabase
+    .from("order_items")
+    .select("*")
+    .eq("order_id", params.id);
+
+  return NextResponse.json({ order, items: items ?? [] });
+}
+
 export async function PATCH(
   req: Request,
   { params }: { params: { id: string } }

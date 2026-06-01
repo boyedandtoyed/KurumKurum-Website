@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import toast from "react-hot-toast";
-import { createClient } from "@/lib/supabase/client";
 import { Order, OrderItem } from "@/types";
 
 const STATUSES = ["pending", "processing", "shipped", "delivered"] as const;
@@ -24,12 +23,9 @@ export default function AdminOrdersPage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const { data } = await supabase
-        .from("orders")
-        .select("*")
-        .order("created_at", { ascending: false });
-      setOrders((data as Order[]) ?? []);
+      const res = await fetch("/api/admin/orders");
+      const json = await res.json();
+      setOrders((json.orders as Order[]) ?? []);
       setLoading(false);
     }
     load();
@@ -38,12 +34,9 @@ export default function AdminOrdersPage() {
   const openOrder = async (order: Order) => {
     setSelected(order);
     setTracking(order.tracking_number ?? "");
-    const supabase = createClient();
-    const { data } = await supabase
-      .from("order_items")
-      .select("*")
-      .eq("order_id", order.id);
-    setItems((data as OrderItem[]) ?? []);
+    const res = await fetch(`/api/admin/orders/${order.id}`);
+    const json = await res.json();
+    setItems((json.items as OrderItem[]) ?? []);
   };
 
   const patchOrder = async (id: string, update: Partial<Order>) => {
