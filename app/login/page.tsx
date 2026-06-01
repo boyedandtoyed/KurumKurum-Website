@@ -1,19 +1,117 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [name, setName] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [redirect, setRedirect] = useState("/");
+
+  // Read ?redirect= and ?error= from the URL on the client (avoids the
+  // useSearchParams Suspense requirement at build time).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get("redirect");
+    if (r && r.startsWith("/")) setRedirect(r);
+    if (params.get("error") === "auth") {
+      setError("That link is invalid or has expired. Please try again.");
+    }
+  }, []);
+
+  const callbackUrl = () =>
+    `${window.location.origin}/auth/callback?redirect=${encodeURIComponent(
+      redirect
+    )}`;
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Auth integration in Phase 2
-    console.log("Auth submit", { email, password, name, isRegister });
+    setError(null);
+    setMessage(null);
+
+    if (isRegister && password !== confirmPassword) {
+      setError("Passwords don't match. Please re-enter them.");
+      return;
+    }
+
+    setLoading(true);
+
+    const supabase = createClient();
+    try {
+      if (isRegister) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name },
+            emailRedirectTo: callbackUrl(),
+          },
+        });
+        if (error) {
+          setError(error.message);
+        } else {
+          setMessage(
+            "Almost there! We've sent a confirmation link to your email. " +
+              "Click it to activate your account, then sign in."
+          );
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) {
+          setError(
+            error.message === "Email not confirmed"
+              ? "Please confirm your email first — check your inbox for the link."
+              : "Invalid email or password. Please try again."
+          );
+        } else {
+          router.push(redirect);
+          router.refresh();
+          return;
+        }
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogle = async () => {
+    setError(null);
+    setMessage(null);
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: callbackUrl() },
+    });
+    if (error) {
+      setError("Couldn't start Google sign-in. Please try again.");
+      setLoading(false);
+    }
+    // On success the browser is redirected to Google, so no further action here.
+  };
+
+  const switchMode = (register: boolean) => {
+    setIsRegister(register);
+    setError(null);
+    setMessage(null);
+    setConfirmPassword("");
   };
 
   return (
@@ -64,7 +162,9 @@ export default function LoginPage() {
           {/* Google button */}
           <button
             type="button"
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-charcoal/15 rounded-xl text-sm font-semibold text-charcoal hover:bg-gray-50 transition-colors shadow-sm mb-5"
+            onClick={handleGoogle}
+            disabled={loading}
+            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-white border border-charcoal/15 rounded-xl text-sm font-semibold text-charcoal hover:bg-gray-50 transition-colors shadow-sm mb-5 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {/* Google SVG */}
             <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -94,6 +194,18 @@ export default function LoginPage() {
             <span className="text-xs text-charcoal/40 font-medium">or</span>
             <div className="flex-1 h-px bg-charcoal/10" />
           </div>
+
+          {/* Alerts */}
+          {error && (
+            <div className="mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+          {message && (
+            <div className="mb-4 px-4 py-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700">
+              {message}
+            </div>
+          )}
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -131,21 +243,53 @@ export default function LoginPage() {
               <label className="block text-xs font-semibold text-charcoal/60 uppercase tracking-wider mb-1.5">
                 Password
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className="w-full px-4 py-3 border border-charcoal/15 rounded-xl text-sm text-charcoal placeholder-charcoal/30 focus:outline-none focus:ring-2 focus:ring-saffron"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 pr-16 border border-charcoal/15 rounded-xl text-sm text-charcoal placeholder-charcoal/30 focus:outline-none focus:ring-2 focus:ring-saffron"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute inset-y-0 right-0 px-4 flex items-center text-xs font-semibold text-saffron hover:underline"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
+
+            {isRegister && (
+              <div>
+                <label className="block text-xs font-semibold text-charcoal/60 uppercase tracking-wider mb-1.5">
+                  Confirm Password
+                </label>
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required={isRegister}
+                  minLength={6}
+                  placeholder="••••••••"
+                  className="w-full px-4 py-3 border border-charcoal/15 rounded-xl text-sm text-charcoal placeholder-charcoal/30 focus:outline-none focus:ring-2 focus:ring-saffron"
+                />
+              </div>
+            )}
 
             <button
               type="submit"
-              className="w-full py-3.5 bg-saffron text-white font-bold rounded-xl hover:bg-[#d07a0b] transition-colors mt-2 shadow-sm"
+              disabled={loading}
+              className="w-full py-3.5 bg-saffron text-white font-bold rounded-xl hover:bg-[#d07a0b] transition-colors mt-2 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {isRegister ? "Create Account" : "Sign In"}
+              {loading
+                ? "Please wait…"
+                : isRegister
+                ? "Create Account"
+                : "Sign In"}
             </button>
           </form>
 
@@ -155,7 +299,7 @@ export default function LoginPage() {
               <>
                 Already have an account?{" "}
                 <button
-                  onClick={() => setIsRegister(false)}
+                  onClick={() => switchMode(false)}
                   className="text-saffron font-semibold hover:underline"
                 >
                   Sign in
@@ -165,7 +309,7 @@ export default function LoginPage() {
               <>
                 Don&apos;t have an account?{" "}
                 <button
-                  onClick={() => setIsRegister(true)}
+                  onClick={() => switchMode(true)}
                   className="text-saffron font-semibold hover:underline"
                 >
                   Register
